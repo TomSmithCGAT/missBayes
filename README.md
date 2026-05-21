@@ -3,6 +3,9 @@ missBayes is an R package for differential expression analysis of proteomics dat
 
 A key feature of missBayes is its explicit modeling of missing values, allowing the method to account for missingness mechanisms commonly observed in bottom-up proteomics data and thereby improve inference robustness.
 
+Details of the methods and evaluation used in this package are described in the accompanying bioRxiv preprint:
+https://www.biorxiv.org/content/10.64898/2026.01.15.699650v1
+
 ## INSTALLATION
 ```r
 install.packages("devtools")
@@ -21,6 +24,8 @@ library(missBayes)
 
 # metadata: a data.frame containing sample annotations. The column 'Condition' specifies experiment groups
 
+# set seed for reproducibility
+set.seed(746)
 group <- as.factor(metadata$Condition)
 
 # Define comparison using limma::makeContrasts
