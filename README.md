@@ -24,8 +24,6 @@ library(missBayes)
 
 # metadata: a data.frame containing sample annotations. The column 'Condition' specifies experiment groups
 
-# set seed for reproducibility
-set.seed(746)
 group <- as.factor(metadata$Condition)
 
 # Define comparison using limma::makeContrasts
