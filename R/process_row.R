@@ -73,9 +73,9 @@ summarizePost = function( paramSampleVec ,
 #'   regression missingness mechanism.
 #' @param mcmcDiag Logical. If `TRUE`, includes additional MCMC diagnostics (ESS, MCSE, R-hat)
 #'   in the output.
-#' @param threshold Numeric. The missing proportion threshold that determines
-#'   which missingness mechanism model to use. If the protein's missingness is < `threshold`,
-#'   the logistic model is used; otherwise, the truncated normal model is used.
+#' @param threshold Numeric. The parameter that determines
+#'   which missingness mechanism model to use. If `threshold = 1`,
+#'   the logistic model is used; If `threshold = 0`, the truncated normal model is used.
 #' @param ROPE A numeric vector of length 2 specifying the lower and upper bounds of the
 #'   Region of Practical Equivalence (ROPE). Values within this interval are considered
 #'   practically equivalent to the null value (e.g., `c(-0.1, 0.1)` for log fold change).
@@ -98,7 +98,8 @@ process_row <- function(i, fixed_data, model_txt, model_logit_txt, mcmcDiag, thr
       pGtROPE = NA,
       ESS = NA,
       MCSE = NA,
-      max_rhat = NA
+      max_rhat = NA,
+      Convergence = NA
     )
   } else{
     summary_row <- data.frame(
@@ -108,7 +109,8 @@ process_row <- function(i, fixed_data, model_txt, model_logit_txt, mcmcDiag, thr
       pLtCompVal = NA,
       pLtROPE = NA,
       pInROPE = NA,
-      pGtROPE = NA
+      pGtROPE = NA,
+      Convergence = NA
     )
   }
 
@@ -187,15 +189,17 @@ process_row <- function(i, fixed_data, model_txt, model_logit_txt, mcmcDiag, thr
 
   # Run JAGS model
   tryCatch({
-    # Use textConnection to avoid disk I/O
+    tmp_model_file <- tempfile(fileext = ".txt")
+    writeLines(model_to_use, tmp_model_file)
     jagsModel <- rjags::jags.model(
-      file = textConnection(model_to_use),
+      file = tmp_model_file,  # use temp file instead
       data = data_jags,
       inits = inits_list,
       n.chains = fixed_data$n_chains,
       n.adapt = fixed_data$n_adpt,
       quiet = TRUE
     )
+    on.exit(unlink(tmp_model_file))
     update(jagsModel, n.iter = fixed_data$n_burnin, progress.bar = "none")
     codaSample <- rjags::coda.samples(
       jagsModel,
@@ -208,11 +212,11 @@ process_row <- function(i, fixed_data, model_txt, model_logit_txt, mcmcDiag, thr
     posterior_combined <- as.matrix(codaSample)
     difference <- posterior_combined[, "mu1p"] - posterior_combined[, "mu2p"]
     postSummary <- summarizePost(difference, compVal = 0, credMass = 0.95, ROPE = ROPE)
+    SD <- stats::sd(difference)
+    EffChnLngth <- coda::effectiveSize(difference)
+    rhat_values <- coda::gelman.diag(codaSample)$psrf[, 'Point est.']
 
     if (mcmcDiag){
-      SD <- stats::sd(difference)
-      EffChnLngth <- coda::effectiveSize(difference)
-      rhat_values <- coda::gelman.diag(codaSample)$psrf[, 'Point est.']
       summary_row <- data.frame(
         HDI_Low = postSummary["HDIlow"],
         HDI_High = postSummary["HDIhigh"],
@@ -223,7 +227,14 @@ process_row <- function(i, fixed_data, model_txt, model_logit_txt, mcmcDiag, thr
         pGtROPE = postSummary["PcntGtROPE"],
         ESS = EffChnLngth,
         MCSE = SD / sqrt(EffChnLngth),
-        max_rhat = max(rhat_values)
+        max_rhat = max(rhat_values),
+        Convergence = ifelse(
+          EffChnLngth >= 1000 & max(rhat_values) <= 1.01, "Strong",
+          ifelse(
+            EffChnLngth >= 200 & max(rhat_values) <= 1.1, "Moderate",
+            "Poor"
+          )
+        )
       )
     } else{
       summary_row <- data.frame(
@@ -233,7 +244,14 @@ process_row <- function(i, fixed_data, model_txt, model_logit_txt, mcmcDiag, thr
         pLtCompVal = pmin(postSummary["PcntGtCompVal"] / 100, 1 - postSummary["PcntGtCompVal"] / 100),
         pLtROPE = postSummary["PcntLtROPE"],
         pInROPE = postSummary["PcntInROPE"],
-        pGtROPE = postSummary["PcntGtROPE"]
+        pGtROPE = postSummary["PcntGtROPE"],
+        Convergence = ifelse(
+          EffChnLngth >= 1000 & max(rhat_values) <= 1.01, "Strong",
+          ifelse(
+            EffChnLngth >= 200 & max(rhat_values) <= 1.1, "Moderate",
+            "Poor"
+          )
+        )
       )
     }
 
@@ -258,9 +276,9 @@ process_row <- function(i, fixed_data, model_txt, model_logit_txt, mcmcDiag, thr
 #' @param burn.in An integer denoting number of burn-in steps.
 #' @param n.iter Integer. Number of iterations after burn-in.
 #' @param n.chains Integer. Number of MCMC chains to run.
-#' @param threshold Numeric. The missing proportion threshold that determines
-#'   which missingness mechanism model to use. If the protein's missingness is < `threshold`,
-#'   the logistic model is used; otherwise, the truncated normal model is used.
+#' @param threshold Numeric. The parameter that determines
+#'   which missingness mechanism model to use. If `threshold = 1`,
+#'   the logistic model is used; If `threshold = 0`, the truncated normal model is used.
 #' @param parallel Logical. If `TRUE`, the analysis for each protein is
 #'   parallelized across multiple CPU cores.
 #' @param ROPE A numeric vector of length 2 specifying the lower and upper bounds of the
@@ -323,45 +341,39 @@ runModel <- function(contrast_data, sigma_p2p, sigma_jp2p, zS, sigma_1, default_
   if (parallel){
     n_cores <- parallel::detectCores() - 1
 
-    if (.Platform$OS.type == "unix") {
-      # Unix-like systems (Linux/macOS)
-      mcmcresults_list_all <- parallel::mclapply(
-        X = 1:nrow(fixed_data$subset_data),
-        FUN = function(i) {
-          process_row(i, fixed_data, model_txt, model_logit_txt)
-        },
-        mc.cores = n_cores
-      )
-    } else {
-      # Windows systems
-      e1 <- environment()
-      cl <- parallel::makeCluster(n_cores)
+    e1 <- environment()
+    cl <- parallel::makeCluster(n_cores)
 
       # Export ALL required objects and functions
-      parallel::clusterExport(cl, varlist = ls(e1),
+    parallel::clusterExport(cl, varlist = c(ls(e1), "process_row"),
                               envir = e1)
 
-      parallel::clusterEvalQ(cl, {
-        requireNamespace("missBayes", quietly = TRUE)
-        requireNamespace("rjags", quietly = TRUE)
-        requireNamespace("coda", quietly = TRUE)
-      })
-
-      mcmcresults_list_all <- parallel::parLapply(
-        cl,
-        1:nrow(fixed_data$subset_data),
-        fun = function(i, fixed_data, model_txt, model_logit_txt, mcmcDiag, threshold, ROPE) {
-          process_row(i, fixed_data, model_txt, model_logit_txt, mcmcDiag, threshold, ROPE)
-        },
-        fixed_data = fixed_data,
-        model_txt = model_txt,
-        model_logit_txt = model_logit_txt,
-        mcmcDiag = mcmcDiag,
-        threshold = threshold,
-        ROPE = ROPE
-      )
-      parallel::stopCluster(cl)
-    }
+    parallel::clusterEvalQ(cl, {
+        library("missBayes", quietly = TRUE)
+        summarizePost <- missBayes:::summarizePost
+        f_alpha <- missBayes:::f_alpha
+        f_beta <- missBayes:::f_beta
+        generate_overdispersed_inits <- missBayes:::generate_overdispersed_inits
+        library("rjags", quietly = TRUE)
+        library("coda", quietly = TRUE)
+    })
+    
+    
+    mcmcresults_list_all <- parallel::parLapply(
+      cl,
+      1:nrow(fixed_data$subset_data),
+      fun = function(i, fixed_data, model_txt, model_logit_txt, mcmcDiag, threshold, ROPE) {
+        process_row(i, fixed_data, model_txt, model_logit_txt, mcmcDiag, threshold, ROPE)
+      },
+      fixed_data = fixed_data,
+      model_txt = model_txt,
+      model_logit_txt = model_logit_txt,
+      mcmcDiag = mcmcDiag,
+      threshold = threshold,
+      ROPE = ROPE
+    )
+    parallel::stopCluster(cl)
+    
 
     # Combine results
     mcmcresults_df <- do.call(rbind, mcmcresults_list_all)

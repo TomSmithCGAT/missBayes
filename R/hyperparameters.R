@@ -30,7 +30,8 @@ zeroState <- function(overall_distri){
       missing_counts[i] <- max(0, expected - observed)
     }
   }
-
+  missing_counts <- round(missing_counts * (sum(is.na(overall_distri)) / sum(missing_counts)))
+  
   # estimate observed probability per bin
   observed_count <- overall_info$counts
   total_count <- observed_count + missing_counts
@@ -331,6 +332,5 @@ default_val <- function(overall_distri, group_vars_all){
 
   return(default)
 }
-
 
 

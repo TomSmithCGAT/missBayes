@@ -43,9 +43,9 @@ HDIofMCMC = function( sampleVec , credMass=0.95 ) {
 #' @param id A character string specifying the protein ID to plot.
 #' @param groups A factor vector specifying the group assignment for each sample.
 #' @param contrast A string specifying which two groups are compared.
-#' @param threshold Numeric. The missing proportion threshold that determines
-#'   which missingness mechanism model to use. If the protein's missingness is < `threshold`,
-#'   the logistic model is used; otherwise, the truncated normal model is used.
+#' @param threshold Numeric. The parameter that determines
+#'   which missingness mechanism model to use. If `threshold = 1`,
+#'   the logistic model is used; If `threshold = 0`, the truncated normal model is used.
 #' @param cenTend Character string. The statistic to represent central tendency.
 #' @param compVal An optional value for comparison (e.g. a null value).
 #' @param ROPE A numeric vector of length 2 specifying the lower and upper bounds of the
@@ -269,7 +269,7 @@ plotPost <- function( values, id , groups, contrast, threshold = 0, cenTend=c("m
   })
   # Override defaults of hist function, if not specified by user:
   # (additional arguments "..." are passed to the hist function)
-  if ( is.null(xlab) ) xlab="LogFC"
+  if ( is.null(xlab) ) xlab="logFC"
   if ( is.null(cex.lab) ) cex.lab=1.5
   if ( is.null(cex) ) cex=1.4
   if ( is.null(xlim) ) xlim=range( c( compVal , ROPE , difference ) )
@@ -398,6 +398,5 @@ plotPost <- function( values, id , groups, contrast, threshold = 0, cenTend=c("m
   par(xpd=FALSE)
 
 }
-
 
 
