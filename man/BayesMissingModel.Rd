@@ -34,9 +34,9 @@ specifying which pairwise group comparisons to perform.}
 \item{filter4NAs}{Logical. If `TRUE`, filters the dataset to retain only rows (proteins)
 that contain at least one missing value.}
 
-\item{threshold}{Numeric. The missing proportion threshold that determines
-which missingness mechanism model to use. If the protein's missingness is < `threshold`,
-the logistic model is used; otherwise, the truncated normal model is used.}
+\item{threshold}{Numeric. The parameter that determines
+which missingness mechanism model to use. If `threshold = 1`,
+the logistic model is used; If `threshold = 0`, the truncated normal model is used.}
 
 \item{parallel}{Logical. If `TRUE`, the analysis for each protein is
 parallelized across multiple CPU cores.}

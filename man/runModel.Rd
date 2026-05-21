@@ -48,9 +48,9 @@ parallelized across multiple CPU cores.}
 
 \item{mcmcDiag}{Logical. If `TRUE`, the output includes additional MCMC diagnostics.}
 
-\item{threshold}{Numeric. The missing proportion threshold that determines
-which missingness mechanism model to use. If the protein's missingness is < `threshold`,
-the logistic model is used; otherwise, the truncated normal model is used.}
+\item{threshold}{Numeric. The parameter that determines
+which missingness mechanism model to use. If `threshold = 1`,
+the logistic model is used; If `threshold = 0`, the truncated normal model is used.}
 
 \item{ROPE}{A numeric vector of length 2 specifying the lower and upper bounds of the
 Region of Practical Equivalence (ROPE). Values within this interval are considered
