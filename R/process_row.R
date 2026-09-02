@@ -115,10 +115,18 @@ process_row <- function(i, fixed_data, model_txt, model_logit_txt, mcmcDiag, thr
     )
   }
 
+  # Surfaced by runModel(); an unfitted protein must not be indistinguishable
+  # from a fitted one, whichever of the exits below is taken.
+  fit_error <- NA_character_
+  fail <- function(msg) {
+    attr(summary_row, "fit_error") <- sprintf("row %d: %s", i, msg)
+    summary_row
+  }
+
   y <- unlist(fixed_data$subset_data[i, ])
 
   # Skip if all NA
-  if (all(is.na(y))) return(summary_row)
+  if (all(is.na(y))) return(fail("no observed values in either group"))
 
   # Calculate missing proportion
   miss_prop <- mean(is.na(y))
@@ -139,14 +147,22 @@ process_row <- function(i, fixed_data, model_txt, model_logit_txt, mcmcDiag, thr
   sample_var_2 <- stats::var(y2, na.rm = TRUE)
   sample_var_2 <- if (is.na(sample_var_2)) fixed_data$default_var else sample_var_2
 
-  # Calculate alpha/beta parameters
-  alpha1 <- tryCatch(f_alpha(sample_mean_1, fixed_data$alpha, fixed_data$a, fixed_data$b), error = function(e) NA)
-  beta1 <- tryCatch(f_beta(sample_mean_1, fixed_data$beta, fixed_data$a, fixed_data$b), error = function(e) NA)
-  alpha2 <- tryCatch(f_alpha(sample_mean_2, fixed_data$alpha, fixed_data$a, fixed_data$b), error = function(e) NA)
-  beta2 <- tryCatch(f_beta(sample_mean_2, fixed_data$beta, fixed_data$a, fixed_data$b), error = function(e) NA)
+  # Calculate alpha/beta parameters, keeping the first failure message so that
+  # a protein whose group means carry no variance prior can be reported.
+  prior_error <- NA_character_
+  lookup_prior <- function(f, mu_val, par) {
+    tryCatch(f(mu_val, par, fixed_data$a, fixed_data$b), error = function(e) {
+      if (is.na(prior_error)) prior_error <<- conditionMessage(e)
+      NA
+    })
+  }
+  alpha1 <- lookup_prior(f_alpha, sample_mean_1, fixed_data$alpha)
+  beta1 <- lookup_prior(f_beta, sample_mean_1, fixed_data$beta)
+  alpha2 <- lookup_prior(f_alpha, sample_mean_2, fixed_data$alpha)
+  beta2 <- lookup_prior(f_beta, sample_mean_2, fixed_data$beta)
 
   # Skip if parameters are invalid
-  if (any(is.na(c(alpha1, beta1, alpha2, beta2)))) return(summary_row)
+  if (any(is.na(c(alpha1, beta1, alpha2, beta2)))) return(fail(prior_error))
 
   # Generate initial values
   inits_list <- generate_overdispersed_inits(sample_mean_1, sample_mean_2,
@@ -189,7 +205,6 @@ process_row <- function(i, fixed_data, model_txt, model_logit_txt, mcmcDiag, thr
   }
 
   # Run JAGS model
-  fit_error <- NA_character_
   tryCatch({
     tmp_model_file <- tempfile(fileext = ".txt")
     writeLines(model_to_use, tmp_model_file)
@@ -263,8 +278,6 @@ process_row <- function(i, fixed_data, model_txt, model_logit_txt, mcmcDiag, thr
     fit_error <<- sprintf("row %d: %s", i, conditionMessage(e))
   })
 
-  # Surfaced by runModel(); an unfitted protein must not be indistinguishable
-  # from a fitted one.
   attr(summary_row, "fit_error") <- fit_error
 
   return(summary_row)

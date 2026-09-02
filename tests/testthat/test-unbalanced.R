@@ -7,10 +7,10 @@ test_that("an unbalanced design fits whichever group is larger", {
   # A handful of proteins are still skipped for the pre-existing reason that
   # their group mean falls in an intensity bin with too few variance estimates
   # to form a prior, so this asserts "essentially all", not "all". What must
-  # hold is that no protein fails inside JAGS - that is what would raise a
-  # warning, and what used to wipe out the whole table.
-  expect_no_warning(larger_first <- toy_run(make_toy(c(A = 6, B = 3))))
-  expect_no_warning(smaller_first <- toy_run(make_toy(c(A = 3, B = 6))))
+  # hold is that no protein fails inside JAGS - that is what used to wipe out
+  # the whole table.
+  larger_first <- expect_no_jags_failure(toy_run(make_toy(c(A = 6, B = 3))))
+  smaller_first <- expect_no_jags_failure(toy_run(make_toy(c(A = 3, B = 6))))
 
   expect_gt(mean(!is.na(larger_first$Median)), 0.95)
   expect_gt(mean(!is.na(smaller_first$Median)), 0.95)

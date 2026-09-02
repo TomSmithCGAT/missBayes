@@ -145,8 +145,10 @@ sigma_jp2params <- function(overall_distri, group){
   # position: groups may be of unequal size and need not be contiguous.
   group_indices <- split(seq_along(group), group)
   # Stands in for the old scalar `r` (replicates per group) in the shape
-  # parameter below. The mean group size equals `r` exactly when every group
-  # is the same size, so this is a no-op for a balanced design.
+  # parameter below. The mean group size equals `r` exactly when every group is
+  # the same size, so this is a no-op for a balanced design. Note that by R's
+  # precedence `alpha_x` evaluates as `mean_vars^2 * var_vars / r`, so `r`
+  # scales rather than divides the variance ratio; kept as published.
   r <- mean(lengths(group_indices))
   group_means_all <- c()
   group_vars_all <- c()
@@ -205,7 +207,9 @@ sigma_jp2params <- function(overall_distri, group){
 f_alpha <- function(mu_val, alpha, a, b) {
   bin_breaks <- a:(b + 1)  # From a to b+1 so that each bin is [x, x+1]
   idx <- findInterval(mu_val, bin_breaks, rightmost.closed = TRUE)
-  if (!is.na(alpha[idx])) {
+  # findInterval() returns 0 below the first break, so guard the subscript:
+  # alpha[0] is numeric(0) and would make the test below error uninformatively.
+  if (idx >= 1L && idx <= length(alpha) && !is.na(alpha[idx])) {
     return(alpha[idx])
   } else {
     stop(paste("No alpha value available for mu =", mu_val))
@@ -228,7 +232,9 @@ f_alpha <- function(mu_val, alpha, a, b) {
 f_beta <- function(mu_val, beta, a, b) {
   bin_breaks <- a:(b + 1)  # From a to b+1 so that each bin is [x, x+1]
   idx <- findInterval(mu_val, bin_breaks, rightmost.closed = TRUE)
-  if (!is.na(beta[idx])) {
+  # findInterval() returns 0 below the first break, so guard the subscript:
+  # beta[0] is numeric(0) and would make the test below error uninformatively.
+  if (idx >= 1L && idx <= length(beta) && !is.na(beta[idx])) {
     return(beta[idx])
   } else {
     stop(paste("No beta value available for mu =", mu_val))

@@ -42,6 +42,30 @@ test_that("BayesMissingModel rejects NA group assignments", {
   )
 })
 
+test_that("BayesMissingModel rejects a contrast that is not a pairwise comparison", {
+  # setupContrasts() resolves a contrast to one "+1" group and one "-1" group,
+  # so an averaged contrast has to be caught up front rather than failing on a
+  # zero-length subscript deep inside it.
+  toy <- make_toy(c(A = 4, B = 4))
+  three <- factor(rep(c("A", "B", "C"), length.out = ncol(toy$values)),
+                  levels = c("A", "B", "C"))
+  cm <- limma::makeContrasts(contrasts = "(A + B) / 2 - C", levels = levels(three))
+
+  expect_error(
+    BayesMissingModel(toy$values, three, cm, parallel = FALSE),
+    "not a pairwise comparison"
+  )
+})
+
+test_that("plotPost applies the same groups validation as BayesMissingModel", {
+  toy <- make_toy(c(A = 4, B = 4))
+
+  expect_error(
+    plotPost(toy$values, rownames(toy$values)[1], toy$groups[-1], "B - A"),
+    "one entry per column"
+  )
+})
+
 test_that("valid unbalanced input passes validation and returns groups as a factor", {
   toy <- make_toy(c(A = 5, B = 3))
   cm <- toy_contrast(toy$groups)

@@ -111,6 +111,8 @@ plotPost <- function( values, id , groups, contrast, threshold = 0, cenTend=c("m
                       ... ) {
 
 
+  groups <- validateGroups(values, groups)
+
   # calculate parameters
   zS <- zeroState(values)
   s1 <- sigma1(values)

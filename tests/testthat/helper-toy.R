@@ -36,6 +36,33 @@ make_toy <- function(sizes = c(A = 4, B = 4), n_prot = 120, seed = 42,
   list(values = values, groups = groups)
 }
 
+# The model is fitted by JAGS through rjags, which needs the JAGS binary as
+# well as the R package; without it the fitting tests are skipped rather than
+# reported as failures.
+skip_without_jags <- function() {
+  testthat::skip_if_not_installed("rjags")
+  testthat::skip_if(
+    inherits(try(rjags::jags.version(), silent = TRUE), "try-error"),
+    "JAGS is not available"
+  )
+}
+
+# A protein whose group mean falls outside the intensity range covered by the
+# variance priors is skipped before JAGS is reached, and collectFitErrors()
+# reports it. A failure inside JAGS - the regression this suite guards against -
+# reads differently, so assert on the message rather than on silence.
+expect_no_jags_failure <- function(expr) {
+  seen <- character()
+  result <- withCallingHandlers(expr, warning = function(w) {
+    seen <<- c(seen, conditionMessage(w))
+    invokeRestart("muffleWarning")
+  })
+  unexpected <- grep("No (alpha|beta) value available", seen,
+                     invert = TRUE, value = TRUE)
+  testthat::expect_identical(unexpected, character(0))
+  result
+}
+
 toy_contrast <- function(groups) {
   limma::makeContrasts(contrasts = "B - A", levels = levels(groups))
 }
@@ -43,6 +70,7 @@ toy_contrast <- function(groups) {
 # MCMC settings small enough to keep the suite quick but long enough for the
 # posterior summaries to be stable.
 toy_run <- function(toy, ...) {
+  skip_without_jags()
   set.seed(1)
   suppressMessages(BayesMissingModel(
     values = toy$values, groups = toy$groups,
